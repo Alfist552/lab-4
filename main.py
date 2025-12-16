@@ -69,7 +69,7 @@ def translate_movie_data(movie_data):
         else:
             translated[key] = value
 
-        return translated
+    return translated
 
 @dp.message_handler(commands=['start'])
 async def start_command(message: types.Message):
@@ -134,6 +134,47 @@ async def handle_other_messages(message: types.Message):
     except Exception as e:
         logger.error(f"Ошибка обработки сообщения: {e}")
         await message.answer("Произошла ошибка, попробуйте еще раз")
+
+def search_movie(title):
+    try:
+        logger.info(f"🔍 Начинаем поиск фильма: '{title}'")
+
+        base_url = URL_OMDb_TOKEN.replace('[', '').replace(']', '')
+
+        encoded_title = title.replace(' ', '+')
+
+        search_url = f"{base_url}t={encoded_title}"
+
+        logger.info(f"📡 Отправляю запрос к API: {search_url}")
+
+        response = requests.get(search_url, timeout=10)
+
+        if response.status_code == 200:
+            movie_data = response.json()
+
+            if movie_data.get('Response') == 'True':
+                logger.info(f" Фильм найден: '{title}'")
+                return movie_data
+            else:
+                error_message = movie_data.get('Error', 'Неизвестная ошибка')
+                logger.warning(f" Фильм не найден: '{title}'. Ошибка: {error_message}")
+                return None
+
+        else:
+            logger.error(f" Ошибка API: HTTP {response.status_code}")
+            return None
+
+    except requests.exceptions.Timeout:
+        logger.error(f"⏱️ Таймаут при поиске фильма: '{title}'")
+        return None
+
+    except requests.exceptions.ConnectionError:
+        logger.error(f" Ошибка подключения при поиске: '{title}'")
+        return None
+
+    except Exception as e:
+        logger.error(f" Неожиданная ошибка при поиске '{title}': {e}")
+        return None
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
