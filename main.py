@@ -140,6 +140,12 @@ async def handle_other_messages(message: types.Message):
             movie_data = search_movie(movie_title)
 
             if movie_data:
+                poster_url = movie_data.get('Poster')
+                if poster_url and poster_url != 'N/A':
+                    try:
+                        await message.answer_photo(poster_url)
+                    except Exception as e:
+                        logger.error(f"Не удалось отправить постер: {photo_error}")
                 result = format_movie_info(movie_data)
                 await message.answer(result)
             else:
@@ -200,13 +206,13 @@ def format_movie_info(movie_data):
     try:
         translated = translate_movie_data(movie_data)
 
-        info = f"{translated.get('🎬 Название', 'Неизвестно')} ({translated.get('📅 Год', 'Неизвестно')})\n\n"
-        info += f"Длительность: {translated.get('⏱️ Длительность', 'Неизвестно')}\n"
-        info += f"Жанр: {translated.get('🎭 Жанр', 'Неизвестно')}\n"
-        info += f"IMDb: {translated.get('⭐ IMDb рейтинг', 'Нет оценки')}\n\n"
-        info += f"Режиссер: {translated.get('🎥 Режиссер', 'Неизвестно')}\n"
-        info += f"Актеры: {translated.get('🌟 Актеры', 'Неизвестно')}\n\n"
-        info += f"Описание: {translated.get('📖 Описание', 'Нет описания')}"
+        info = f"🎬{translated.get('🎬 Название', 'Неизвестно')} ({translated.get('📅 Год', 'Неизвестно')})\n\n"
+        info += f"⏱️Длительность: {translated.get('⏱️ Длительность', 'Неизвестно')}\n"
+        info += f"🎭Жанр: {translated.get('🎭 Жанр', 'Неизвестно')}\n"
+        info += f"⭐IMDb: {translated.get('⭐ IMDb рейтинг', 'Нет оценки')}\n\n"
+        info += f"🎥Режиссер: {translated.get('🎥 Режиссер', 'Неизвестно')}\n"
+        info += f"🌟Актеры: {translated.get('🌟 Актеры', 'Неизвестно')}\n\n"
+        info += f"📖Описание: {translated.get('📖 Описание', 'Нет описания')}"
 
         return info
 
