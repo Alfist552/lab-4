@@ -127,7 +127,27 @@ async def search_command(message: types.Message):
 @dp.message_handler()
 async def handle_other_messages(message: types.Message):
     try:
-        if message.text:
+        user_id = message.from_user.id
+        if user_id in waiting_for_search and waiting_for_search[user_id]:
+            movie_title = message.text.strip()
+            if not movie_title:
+                await message.answer("Пожалуйста, введите название фильма.")
+                return
+            del waiting_for_search[user_id]
+
+            await message.answer(f" Ищу '{movie_title}'...")
+
+            movie_data = search_movie(movie_title)
+
+            if movie_data:
+                result = format_movie_info(movie_data)
+                await message.answer(result)
+            else:
+                await message.answer(f"❌ Фильм '{movie_title}' не найден")
+
+            await message.answer("🔍 Для нового поиска используйте /search")
+
+        else:
             response = 'Не распознал вашу команду ❌. Для вывода всех команд нажмите на /help'
             await message.answer(response)
 
@@ -175,6 +195,24 @@ def search_movie(title):
     except Exception as e:
         logger.error(f" Неожиданная ошибка при поиске '{title}': {e}")
         return None
+
+def format_movie_info(movie_data):
+    try:
+        translated = translate_movie_data(movie_data)
+
+        info = f"{translated.get('🎬 Название', 'Неизвестно')} ({translated.get('📅 Год', 'Неизвестно')})\n\n"
+        info += f"Длительность: {translated.get('⏱️ Длительность', 'Неизвестно')}\n"
+        info += f"Жанр: {translated.get('🎭 Жанр', 'Неизвестно')}\n"
+        info += f"IMDb: {translated.get('⭐ IMDb рейтинг', 'Нет оценки')}\n\n"
+        info += f"Режиссер: {translated.get('🎥 Режиссер', 'Неизвестно')}\n"
+        info += f"Актеры: {translated.get('🌟 Актеры', 'Неизвестно')}\n\n"
+        info += f"Описание: {translated.get('📖 Описание', 'Нет описания')}"
+
+        return info
+
+    except Exception as e:
+        logger.error(f"Ошибка: {e}")
+        return "Ошибка при обработке данных"
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
