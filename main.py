@@ -1,6 +1,9 @@
 import logging
 import requests
 from aiogram import Bot,Dispatcher, types, executor
+import os
+import json
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 logging.basicConfig(
     level = logging.INFO,
@@ -14,7 +17,9 @@ URL_OMDb_TOKEN = 'http://www.omdbapi.com/?apikey=[5178ecd3]&'
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
+FAVORITES_FILE = 'favorites.json'
 waiting_for_search = {}
+last_movies = {}
 
 FIELD_TRANSLATIONS = {
     'Title': '🎬 Название',
@@ -92,6 +97,7 @@ async def help_command(message: types.Message):
     try:
         text ="""Список всех команд:
     /search - поиск фильма 🧑‍💻
+    /myfav - мои избранные фильмы ❤️
     /info - информация о источнике данныхℹ️
     /start - главное меню"""
         await message.answer(text)
@@ -123,7 +129,6 @@ async def search_command(message: types.Message):
         logger.error(f"Ошибка в /search: {e}")
         await message.answer("Произошла ошибка")
 
-
 @dp.message_handler()
 async def handle_other_messages(message: types.Message):
     try:
@@ -145,9 +150,20 @@ async def handle_other_messages(message: types.Message):
                     try:
                         await message.answer_photo(poster_url)
                     except Exception as e:
-                        logger.error(f"Не удалось отправить постер: {photo_error}")
-                result = format_movie_info(movie_data)
+                        logger.error(f"Не удалось отправить постер: {e}")
+                result, is_in_fav = format_movie_info(movie_data, user_id = user_id)
                 await message.answer(result)
+
+                keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+                if not is_in_fav:
+                    keyboard.add(KeyboardButton("❤️ Добавить в избранное"))
+                else:
+                    keyboard.add(KeyboardButton("✅ Уже в избранном"))
+                keyboard.add(KeyboardButton("🔍 Новый поиск"))
+
+                last_movies[user_id] = movie_data
+
+                await message.answer("Что делаем дальше?", reply_markup=keyboard)
             else:
                 await message.answer(f"❌ Фильм '{movie_title}' не найден")
 
@@ -202,7 +218,7 @@ def search_movie(title):
         logger.error(f" Неожиданная ошибка при поиске '{title}': {e}")
         return None
 
-def format_movie_info(movie_data):
+def format_movie_info(movie_data, user_id = None):
     try:
         translated = translate_movie_data(movie_data)
 
@@ -214,11 +230,51 @@ def format_movie_info(movie_data):
         info += f"🌟Актеры: {translated.get('🌟 Актеры', 'Неизвестно')}\n\n"
         info += f"📖Описание: {translated.get('📖 Описание', 'Нет описания')}"
 
-        return info
+        is_in_fav = False
+        if user_id:
+            favorites = get_favorites(user_id)
+            for fav in favorites:
+                if fav.get('imdbID') == movie_data.get('imdbID'):
+                    is_in_fav = True
+                    break
+
+        return info,is_in_fav
 
     except Exception as e:
         logger.error(f"Ошибка: {e}")
         return "Ошибка при обработке данных"
+
+def load_favorites():
+    if os.path.exists(FAVORITES_FILE):
+        try:
+            with open(FAVORITES_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_favorites(favorites):
+    with open(FAVORITES_FILE, 'w') as f:
+        json.dump(favorites, f)
+
+def add_to_favorites(user_id, movie_data):
+    favorites = load_favorites()
+    user_id_str = str(user_id)
+
+    if user_id_str not in favorites:
+        favorites[user_id_str] = []
+
+    for movie in favorites[user_id_str]:
+        if movie.get('imdbID') == movie_data.get('imdbID'):
+            return False
+
+    favorites[user_id_str].append(movie_data)
+    save_favorites(favorites)
+    return True
+
+def get_favorites(user_id):
+    favorites = load_favorites()
+    return favorites.get(str(user_id), [])
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
