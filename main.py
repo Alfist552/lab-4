@@ -149,7 +149,7 @@ async def my_favorites_command(message: types.Message):
         logger.error(f"Ошибка в /myfav: {e}")
         await message.answer("Ошибка загрузки избранного")
 
-@dp.message_handler(lambda message: message.text in ["❤️ Добавить в избранное", "✅ Уже в избранном", "🔍 Новый поиск"])
+@dp.message_handler(lambda message: message.text in ["❤️ Добавить в избранное", "✅ Уже в избранном", "🔍 Новый поиск", "🗑️ Убрать из избранного"])
 async def handle_keyboard_buttons(message: types.Message):
     try:
         user_id = message.from_user.id
@@ -161,6 +161,16 @@ async def handle_keyboard_buttons(message: types.Message):
                     await message.answer("✅ Фильм добавлен в избранное!", reply_markup=types.ReplyKeyboardRemove())
                 else:
                     await message.answer("❌ Фильм уже в избранном", reply_markup=types.ReplyKeyboardRemove())
+            else:
+                await message.answer("Сначала найдите фильм через /search", reply_markup=types.ReplyKeyboardRemove())
+
+        elif message.text == '🗑️ Убрать из избранного':
+            if user_id in last_movies:
+                movie_data = last_movies[user_id]
+                if remove_from_favorites(user_id, movie_data):
+                    await message.answer("🗑️ Фильм удален из избранного!", reply_markup=types.ReplyKeyboardRemove())
+                else:
+                    await message.answer("❌ Фильм не найден в избранном", reply_markup=types.ReplyKeyboardRemove())
             else:
                 await message.answer("Сначала найдите фильм через /search", reply_markup=types.ReplyKeyboardRemove())
 
@@ -203,7 +213,10 @@ async def handle_other_messages(message: types.Message):
                 if not is_in_fav:
                     keyboard.add(KeyboardButton("❤️ Добавить в избранное"))
                 else:
-                    keyboard.add(KeyboardButton("✅ Уже в избранном"))
+                    keyboard.row(
+                    KeyboardButton("✅ Уже в избранном"),
+                    KeyboardButton("🗑️ Убрать из избранного")
+                )
                 keyboard.add(KeyboardButton("🔍 Новый поиск"))
 
                 last_movies[user_id] = movie_data
@@ -320,6 +333,26 @@ def add_to_favorites(user_id, movie_data):
 def get_favorites(user_id):
     favorites = load_favorites()
     return favorites.get(str(user_id), [])
+
+def remove_from_favorites(user_id, movie_data):
+    favorites = load_favorites()
+    user_id_str = str(user_id)
+
+    if user_id_str not in favorites:
+        return False
+
+    for i, movie in enumerate(favorites[user_id_str]):
+        if movie.get('imdbID') == movie_data.get('imdbID'):
+            favorites[user_id_str].pop(i)
+
+            if not favorites[user_id_str]:
+                del favorites[user_id_str]
+
+            save_favorites(favorites)
+            return True
+
+    return False
+
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
