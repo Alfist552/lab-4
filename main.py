@@ -184,10 +184,13 @@ async def handle_keyboard_buttons(message: types.Message):
         logger.error(f"Ошибка обработки кнопки: {e}")
         await message.answer("Произошла ошибка", reply_markup=types.ReplyKeyboardRemove())
 
+
 @dp.message_handler()
 async def handle_other_messages(message: types.Message):
     try:
         user_id = message.from_user.id
+
+        # Проверка на поиск фильмов
         if user_id in waiting_for_search and waiting_for_search[user_id]:
             movie_title = message.text.strip()
             if not movie_title:
@@ -197,35 +200,80 @@ async def handle_other_messages(message: types.Message):
 
             await message.answer(f" Ищу '{movie_title}'...")
 
-            movie_data = search_movie(movie_title)
+            movies = search_movie(movie_title)
 
-            if movie_data:
-                poster_url = movie_data.get('Poster')
-                if poster_url and poster_url != 'N/A':
-                    try:
-                        await message.answer_photo(poster_url)
-                    except Exception as e:
-                        logger.error(f"Не удалось отправить постер: {e}")
-                result, is_in_fav = format_movie_info(movie_data, user_id = user_id)
-                await message.answer(result)
+            if movies:
+                response = f"🎬 *Найдено фильмов:* {len(movies)}\n\n"
 
-                keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-                if not is_in_fav:
-                    keyboard.add(KeyboardButton("❤️ Добавить в избранное"))
-                else:
-                    keyboard.row(
-                    KeyboardButton("✅ Уже в избранном"),
-                    KeyboardButton("🗑️ Убрать из избранного")
-                )
-                keyboard.add(KeyboardButton("🔍 Новый поиск"))
+                for i, movie in enumerate(movies, 1):
+                    title = movie.get('Title', 'Неизвестно')
+                    year = movie.get('Year', '?')
+                    movie_type = movie.get('Type', 'movie')
 
-                last_movies[user_id] = movie_data
+                    icon = "🎬" if movie_type == "movie" else "📺" if movie_type == "series" else "🎞️"
 
-                await message.answer("Что делаем дальше?", reply_markup=keyboard)
+                    response += f"{i}. {icon} *{title}* ({year})\n"
+
+                response += "\nВведите номер фильма (1-10), чтобы посмотреть подробную информацию:"
+
+                if 'search_results' not in last_movies:
+                    last_movies['search_results'] = {}
+                last_movies['search_results'][user_id] = movies
+
+                await message.answer(response, parse_mode='Markdown')
+
             else:
-                await message.answer(f"❌ Фильм '{movie_title}' не найден")
+                await message.answer(f"❌ По запросу '{movie_title}' ничего не найдено")
+                await message.answer("🔍 Попробуйте другой запрос или используйте /search")
 
-            await message.answer("🔍 Для нового поиска используйте /search")
+        elif message.text.isdigit():
+            user_id = message.from_user.id
+            choice = int(message.text)
+
+            if 'search_results' in last_movies and user_id in last_movies['search_results']:
+                movies = last_movies['search_results'][user_id]
+
+                if 1 <= choice <= len(movies):
+                    selected_movie = movies[choice - 1]
+                    imdb_id = selected_movie.get('imdbID')
+
+                    if imdb_id:
+                        await message.answer(f"📖 Загружаю информацию о фильме...")
+
+                        detailed_movie = get_movie_details(imdb_id)
+
+                        if detailed_movie:
+                            poster_url = detailed_movie.get('Poster')
+                            if poster_url and poster_url != 'N/A':
+                                try:
+                                    await message.answer_photo(poster_url)
+                                except Exception as e:
+                                    logger.error(f"Не удалось отправить постер: {e}")
+
+                            result, is_in_fav = format_movie_info(detailed_movie, user_id=user_id)
+                            await message.answer(result)
+
+                            keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+                            if not is_in_fav:
+                                keyboard.add(KeyboardButton("❤️ Добавить в избранное"))
+                            else:
+                                keyboard.row(
+                                    KeyboardButton("✅ Уже в избранном"),
+                                    KeyboardButton("🗑️ Убрать из избранного")
+                                )
+                            keyboard.add(KeyboardButton("🔍 Новый поиск"))
+
+                            last_movies[user_id] = detailed_movie
+
+                            await message.answer("Что делаем дальше?", reply_markup=keyboard)
+                        else:
+                            await message.answer("❌ Не удалось получить информацию о фильме")
+                    else:
+                        await message.answer("❌ Ошибка: у фильма нет ID")
+                else:
+                    await message.answer(f"❌ Пожалуйста, введите номер от 1 до {len(movies)}")
+            else:
+                await message.answer("🔍 Сначала выполните поиск с помощью /search")
 
         else:
             response = 'Не распознал вашу команду ❌. Для вывода всех команд нажмите на /help'
@@ -243,7 +291,7 @@ def search_movie(title):
 
         encoded_title = title.replace(' ', '+')
 
-        search_url = f"{base_url}t={encoded_title}"
+        search_url = f"{base_url}s={encoded_title}"
 
         logger.info(f"📡 Отправляю запрос к API: {search_url}")
 
@@ -253,40 +301,41 @@ def search_movie(title):
             movie_data = response.json()
 
             if movie_data.get('Response') == 'True':
-                logger.info(f" Фильм найден: '{title}'")
-                return movie_data
+                movies = movie_data.get('Search', [])
+                logger.info(f" Найдены фильмы: {len(movies)}")
+                return movies[:10]
             else:
                 error_message = movie_data.get('Error', 'Неизвестная ошибка')
                 logger.warning(f" Фильм не найден: '{title}'. Ошибка: {error_message}")
-                return None
+                return []
 
         else:
             logger.error(f" Ошибка API: HTTP {response.status_code}")
-            return None
+            return []
 
     except requests.exceptions.Timeout:
         logger.error(f"⏱️ Таймаут при поиске фильма: '{title}'")
-        return None
+        return []
 
     except requests.exceptions.ConnectionError:
         logger.error(f" Ошибка подключения при поиске: '{title}'")
-        return None
+        return []
 
     except Exception as e:
         logger.error(f" Неожиданная ошибка при поиске '{title}': {e}")
-        return None
+        return []
 
 def format_movie_info(movie_data, user_id = None):
     try:
         translated = translate_movie_data(movie_data)
 
         info = f"🎬{translated.get('🎬 Название', 'Неизвестно')} ({translated.get('📅 Год', 'Неизвестно')})\n\n"
-        info += f"⏱️Длительность: {translated.get('⏱️ Длительность', 'Неизвестно')}\n"
-        info += f"🎭Жанр: {translated.get('🎭 Жанр', 'Неизвестно')}\n"
-        info += f"⭐IMDb: {translated.get('⭐ IMDb рейтинг', 'Нет оценки')}\n\n"
-        info += f"🎥Режиссер: {translated.get('🎥 Режиссер', 'Неизвестно')}\n"
-        info += f"🌟Актеры: {translated.get('🌟 Актеры', 'Неизвестно')}\n\n"
-        info += f"📖Описание: {translated.get('📖 Описание', 'Нет описания')}"
+        info += f"⏱️ Длительность: {translated.get('⏱️ Длительность', 'Неизвестно')}\n"
+        info += f"🎭 Жанр: {translated.get('🎭 Жанр', 'Неизвестно')}\n"
+        info += f"⭐ IMDb: {translated.get('⭐ IMDb рейтинг', 'Нет оценки')}\n\n"
+        info += f"🎥 Режиссер: {translated.get('🎥 Режиссер', 'Неизвестно')}\n"
+        info += f"🌟 Актеры: {translated.get('🌟 Актеры', 'Неизвестно')}\n\n"
+        info += f"📖 Описание: {translated.get('📖 Описание', 'Нет описания')}"
 
         is_in_fav = False
         if user_id:
@@ -353,6 +402,28 @@ def remove_from_favorites(user_id, movie_data):
 
     return False
 
+
+def get_movie_details(imdb_id):
+    try:
+        base_url = URL_OMDb_TOKEN.replace('[', '').replace(']', '')
+        search_url = f"{base_url}i={imdb_id}"
+
+        logger.info(f"📡 Загружаю детали фильма: {imdb_id}")
+
+        response = requests.get(search_url, timeout=10)
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('Response') == 'True':
+                logger.info(f"✅ Детали фильма загружены")
+                return data
+
+        logger.warning(f"⚠️ Не удалось загрузить детали фильма")
+        return None
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка при получении деталей: {e}")
+        return None
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
