@@ -129,6 +129,51 @@ async def search_command(message: types.Message):
         logger.error(f"Ошибка в /search: {e}")
         await message.answer("Произошла ошибка")
 
+@dp.message_handler(commands=['myfav'])
+async def my_favorites_command(message: types.Message):
+    try:
+        user_id = message.from_user.id
+        favorites = get_favorites(user_id)
+
+        if not favorites:
+            await message.answer("У вас пока нет избранных фильмов 😢\nНайдите фильм через /search")
+            return
+
+        response = "🎬 Ваши избранные фильмы:\n\n"
+        for i, movie in enumerate(favorites, 1):
+            response += f"{i}. {movie.get('Title', 'Неизвестно')} ({movie.get('Year', '?')})\n"
+
+        await message.answer(response)
+
+    except Exception as e:
+        logger.error(f"Ошибка в /myfav: {e}")
+        await message.answer("Ошибка загрузки избранного")
+
+@dp.message_handler(lambda message: message.text in ["❤️ Добавить в избранное", "✅ Уже в избранном", "🔍 Новый поиск"])
+async def handle_keyboard_buttons(message: types.Message):
+    try:
+        user_id = message.from_user.id
+
+        if message.text == "❤️ Добавить в избранное":
+            if user_id in last_movies:
+                movie_data = last_movies[user_id]
+                if add_to_favorites(user_id, movie_data):
+                    await message.answer("✅ Фильм добавлен в избранное!", reply_markup=types.ReplyKeyboardRemove())
+                else:
+                    await message.answer("❌ Фильм уже в избранном", reply_markup=types.ReplyKeyboardRemove())
+            else:
+                await message.answer("Сначала найдите фильм через /search", reply_markup=types.ReplyKeyboardRemove())
+
+        elif message.text == "🔍 Новый поиск":
+            await message.answer("Используйте /search для нового поиска", reply_markup=types.ReplyKeyboardRemove())
+
+        elif message.text == "✅ Уже в избранном":
+            await message.answer("Этот фильм уже в вашем избранном!", reply_markup=types.ReplyKeyboardRemove())
+
+    except Exception as e:
+        logger.error(f"Ошибка обработки кнопки: {e}")
+        await message.answer("Произошла ошибка", reply_markup=types.ReplyKeyboardRemove())
+
 @dp.message_handler()
 async def handle_other_messages(message: types.Message):
     try:
