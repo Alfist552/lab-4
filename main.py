@@ -95,11 +95,10 @@ async def start_command(message: types.Message):
 @dp.message_handler(commands=['help'])
 async def help_command(message: types.Message):
     try:
-        text ="""Список всех команд:
-    /search - поиск фильма 🧑‍💻
-    /myfav - мои избранные фильмы ❤️
-    /info - информация о источнике данныхℹ️
-    /start - главное меню"""
+        text ="""Как пользоваться ботом?
+        При помощи команды /search вам становится доступна возможность самостоятельно вбить в поиск название фильм
+        Обратите внимание, что фильм/сериал должен быть введен вами строго на английском языке!
+        """
         await message.answer(text)
 
     except Exception as e:
@@ -111,7 +110,7 @@ async def info_command(message: types.Message):
     try:
         text = """Информация о боте:
     Данные о фильмах предоставляются благодаря сервису OMDb✅
-    Рейтинги составлены на основе IMDb, Rotten Tomatoes🍅"""
+    Рейтинги составлены на основе IMDb"""
         await message.answer(text)
 
     except Exception as e:
@@ -190,7 +189,6 @@ async def handle_other_messages(message: types.Message):
     try:
         user_id = message.from_user.id
 
-        # Проверка на поиск фильмов
         if user_id in waiting_for_search and waiting_for_search[user_id]:
             movie_title = message.text.strip()
             if not movie_title:
