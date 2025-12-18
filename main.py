@@ -192,7 +192,7 @@ async def handle_other_messages(message: types.Message):
         if user_id in waiting_for_search and waiting_for_search[user_id]:
             movie_title = message.text.strip()
             if not movie_title:
-                await message.answer("Пожалуйста, введите название фильма.")
+                await message.answer("🔍Пожалуйста, введите название фильма.")
                 return
             del waiting_for_search[user_id]
 
@@ -212,7 +212,7 @@ async def handle_other_messages(message: types.Message):
 
                     response += f"{i}. {icon} *{title}* ({year})\n"
 
-                response += "\nВведите номер фильма (1-10), чтобы посмотреть подробную информацию:"
+                response += "\nВведите номер фильма (1-10), чтобы посмотреть подробную информацию:🔍"
 
                 if 'search_results' not in last_movies:
                     last_movies['search_results'] = {}
@@ -263,7 +263,7 @@ async def handle_other_messages(message: types.Message):
 
                             last_movies[user_id] = detailed_movie
 
-                            await message.answer("Что делаем дальше?", reply_markup=keyboard)
+                            await message.answer("Что делаем дальше?🔍", reply_markup=keyboard)
                         else:
                             await message.answer("❌ Не удалось получить информацию о фильме")
                     else:
